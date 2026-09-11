@@ -1,0 +1,224 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-09-11T00:07:56+00:00",
+    "name": "WARDOGS",
+    "author": "support@shadowhavenhosting.net",
+    "description": "WARDOGS (Bulkhead / Team17) Unreal Engine 5 dedicated server. Installs from the Steam community-provider branch with a licensed Steam account, renders Configs/ServerSettings.ini from the Startup variables, and auto-updates in place. Requires enrolment in Bulkhead's approved community-provider program for the Steam licence, App ID and Pragma PatchId.",
+    "features": [
+        "steam_disk_space"
+    ],
+    "docker_images": {
+        "Shadow Haven WARDOGS": "ghcr.io/shadowhaven/wardogs:latest"
+    },
+    "file_denylist": [],
+    "startup": "./Wardogs/Binaries/Linux/{{BINARY}} -log -hostaddress={{SERVER_IP}} -hostport={{SERVER_PORT}} -port={{SERVER_PORT}} -RCONPort={{RCON_LISTEN_PORT}} -PatchId={{PRAGMA_BRANCH}}_COMMUNITY_{{HOST_TAG}} -StandaloneConfig=\"/home/container/Configs/ServerSettings.ini\" -USERDIR=\"/home/container\" -MaxServerWorkerThreads={{WORKER_THREADS}} -AllAntiCheat",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"LevelLoad: Loaded the whole level\"\r\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# WARDOGS dedicated server - Pterodactyl/Pelican install script (Shadow Haven Hosting)\n# Runs in the installer container; /mnt/server becomes /home/container.\napt-get update >/dev/null 2>&1 || true\napt-get install -y --no-install-recommends curl ca-certificates tar lib32gcc-s1 lib32stdc++6 >/dev/null 2>&1 || true\n\nmkdir -p /mnt/server/steamcmd /mnt/server/Configs /mnt/server/Saved/Logs /mnt/server/.steam/sdk64 /mnt/server/.steam/sdk32\ncd /mnt/server/steamcmd\nif [ ! -f steamcmd.sh ]; then\n  echo \"[Install] Downloading SteamCMD..\"\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz\nfi\n\nif [ -z \"${SRCDS_APPID}\" ]; then\n  echo \"[Install] SRCDS_APPID is empty. Set it to the WARDOGS dedicated-server App ID from Bulkhead's community-provider program, then reinstall.\"\n  echo \"[Install] Continuing so the server skeleton exists; the boot script will refuse to start until the game is installed.\"\nelse\n  if [ -n \"${STEAM_USER}\" ]; then\n    LOGIN=\"+login ${STEAM_USER} ${STEAM_PASS} ${STEAM_AUTH}\"\n  else\n    echo \"[Install] WARNING: no STEAM_USER set. The '${SRCDS_BETAID}' branch is only licensed to approved providers; anonymous will fail.\"\n    LOGIN=\"+login anonymous\"\n  fi\n  BETA=\"\"\n  [ -n \"${SRCDS_BETAID}\" ]   && BETA=\"${BETA} -beta ${SRCDS_BETAID}\"\n  [ -n \"${SRCDS_BETAPASS}\" ] && BETA=\"${BETA} -betapassword ${SRCDS_BETAPASS}\"\n  echo \"[Install] Installing app ${SRCDS_APPID} (branch ${SRCDS_BETAID:-public})..\"\n  ./steamcmd.sh +force_install_dir /mnt/server ${LOGIN} +app_update ${SRCDS_APPID} ${BETA} validate +quit\n  echo \"${SRCDS_BETAID}\" > /mnt/server/.install-branch.txt\nfi\n\n# Steam client shims the UE Steam subsystem dlopen()s at boot\nln -sf /home/container/steamcmd/linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so\nln -sf /home/container/steamcmd/linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so\n\n# Default config files (the boot script fills in name/password/players/RCON from the panel)\nif [ ! -f /mnt/server/Configs/APIWhitelist.txt ]; then\ncat > /mnt/server/Configs/APIWhitelist.txt <<'EOF'\n# WARDOGS Remote API IP whitelist\n# One IP address or CIDR range per line. Lines starting with # are ignored.\n# Leave empty to allow any IP.\nEOF\nfi\nchmod -R u+rwX /mnt/server\necho \"[Install] Done.\"\n",
+            "container": "ghcr.io/parkervcp/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Server Name",
+            "description": "The name of your server as it appears in the Server List.",
+            "env_variable": "SERVER_NAME",
+            "default_value": "A Shadow Haven Server",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:120",
+            "field_type": "text"
+        },
+        {
+            "name": "Server Password",
+            "description": "If set, this password is required to connect to the server.",
+            "env_variable": "SERVER_PASS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Max Players",
+            "description": "Maximum players that can connect at one time (WARDOGS supports 60-100).",
+            "env_variable": "MAX_PLAYERS",
+            "default_value": "100",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:60,100",
+            "field_type": "text"
+        },
+        {
+            "name": "Auto Update",
+            "description": "0 = never, 1 = check on startup only, 2 = on startup + hourly (server warns, then restarts itself).",
+            "env_variable": "AUTO_UPDATE",
+            "default_value": "2",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:0,1,2",
+            "field_type": "text"
+        },
+        {
+            "name": "Auto Update Restart Timer",
+            "description": "Minutes to wait before restarting for an update when Auto Update is 2.",
+            "env_variable": "WARN_TIMER",
+            "default_value": "60",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|integer|between:15,720",
+            "field_type": "text"
+        },
+        {
+            "name": "RCON Accessibility",
+            "description": "1 = RCON listens on the RCON Port allocation for rcon.wardogs.com / external tools. 0 = 127.0.0.1 only.",
+            "env_variable": "REMOTE_API",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:0,1",
+            "field_type": "text"
+        },
+        {
+            "name": "RCON Password",
+            "description": "Password for the WARDOGS RCON service. Leave empty to generate one per boot (printed in console and Saved/RCON/ADMIN-PASSWORD.txt).",
+            "env_variable": "WDRCON_PASSWORD",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|min:12|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "RCON Port",
+            "description": "Port RCON listens on when RCON Accessibility is Remote. Must be an allocation assigned to this server (convention: game port + 1).",
+            "env_variable": "RCON_PORT",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|integer|between:1024,65535",
+            "field_type": "text"
+        },
+        {
+            "name": "Worker Threads",
+            "description": "-MaxServerWorkerThreads passed to the server.",
+            "env_variable": "WORKER_THREADS",
+            "default_value": "6",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": "required|integer|between:1,32",
+            "field_type": "text"
+        },
+        {
+            "name": "Recycle Hours",
+            "description": "Graceful cleanup restart after this many hours of uptime. 0 disables.",
+            "env_variable": "RECYCLE_HOURS",
+            "default_value": "12",
+            "user_viewable": true,
+            "user_editable": false,
+            "rules": "required|integer|between:0,168",
+            "field_type": "text"
+        },
+        {
+            "name": "Server Binary",
+            "description": "File name of the Linux server executable inside Wardogs/Binaries/Linux/ (from the community-provider package).",
+            "env_variable": "BINARY",
+            "default_value": "WardogsServer",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Pragma Branch",
+            "description": "Backend branch Bulkhead issued to you; becomes -PatchId=<PRAGMA_BRANCH>_COMMUNITY_<HOST_TAG>.",
+            "env_variable": "PRAGMA_BRANCH",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Host Tag",
+            "description": "Your provider tag in the PatchId suffix (Bisect's is BISECT).",
+            "env_variable": "HOST_TAG",
+            "default_value": "SHADOWHAVEN",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|string|alpha_num|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam App ID",
+            "description": "WARDOGS dedicated-server App ID from the community-provider program.",
+            "env_variable": "SRCDS_APPID",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|integer",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Branch",
+            "description": "Steam beta branch for the server package.",
+            "env_variable": "SRCDS_BETAID",
+            "default_value": "community_provider_server",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Branch Password",
+            "description": "Beta branch password, if Bulkhead issued one.",
+            "env_variable": "SRCDS_BETAPASS",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Username",
+            "description": "Steam account holding the community-provider licence (NOT anonymous).",
+            "env_variable": "STEAM_USER",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Password",
+            "description": "Password for that Steam account. Use an account with Steam Guard disabled or supply STEAM_AUTH.",
+            "env_variable": "STEAM_PASS",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Steam Guard Code",
+            "description": "One-time Steam Guard code if the account needs one (usually blank).",
+            "env_variable": "STEAM_AUTH",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|string|max:16",
+            "field_type": "text"
+        }
+    ]
+}
